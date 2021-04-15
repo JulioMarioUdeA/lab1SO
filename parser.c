@@ -8,10 +8,14 @@ int orfila(int[], int[], int[]);
 int cuantasPosiciones(int, int[], int);
 void rotarVector(int[], int);
 double fact(int);
-char error_message[30] = "An error has occurred\n";
 
 int main(int argc, char *argv[])
 {
+    if (argc != 2)
+    {
+        printf("error en parametros\n");
+        exit(1);
+    }
     //int *num_ing_dif = NULL;   //vector de cantidad total del ingrediente por ingrediente
     int *pes = (int *)malloc(4 * sizeof(int)); // pp, p2, p3, p4
     int *num_ing_por_plato = NULL;             //numero de ingredientes por plato en una linea en el archivo
@@ -24,19 +28,35 @@ int main(int argc, char *argv[])
     char *line = NULL;
     if (archivo == NULL)
     {
-        write(STDERR_FILENO, error_message, strlen(error_message));
+        printf("error al leer el archivo\n");
         exit(1);
     }
-
+    //########################################################################################################### recorriendo el archivo
     int numlinea = 0; // para mirar si es la primera linea o no
     while (getline(&line, &len, archivo) != -1)
     {
         int numtoken = 0; //para conteo de tokens separados por espacios
-        char *token = strtok(line, " \n");
+        char *token = strtok(line, "\n ");
         while (token != NULL)
         {
+            char *p = token;
+            while (*p != '\0')
+            {
+
+                if (*p == 13)
+                {
+                    *p = '\0';
+                }
+                p++;
+            }
+
             if (numlinea == 0)
             {
+                if (numtoken > 3)
+                {
+                    printf("error tokens de mas -%s- en linea %d\n", token, numlinea);
+                    exit(1);
+                }
                 pes[numtoken] = atoi(token);
                 if (numtoken == 0)
                 {
@@ -45,6 +65,12 @@ int main(int argc, char *argv[])
             }
             else if (numlinea == 1)
             {
+                if (pes[0] != pes[1] * 2 + pes[2] * 3 + pes[3] * 4)
+                {
+                    printf("error el vector de p no concuerda\n");
+                    exit(1);
+                }
+
                 if (numtoken == 0)
                 {
                     num_ing_por_plato[numlinea - 1] = atoi(token); //redundante
@@ -56,6 +82,12 @@ int main(int argc, char *argv[])
                     char *ing = (char *)malloc(20);
                     strcpy(ing, token);
                     ing_dif[numtoken - 1] = ing;
+
+                    if (numtoken > num_ing_por_plato[numlinea - 1])
+                    {
+                        printf("error tokens de mas -%s- en linea %d\n", token, numlinea);
+                        exit(1);
+                    }
                 }
             }
             else
@@ -66,6 +98,12 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
+                    if (numtoken > num_ing_por_plato[numlinea - 1])
+                    {
+                        printf("error tokens de mas -%s- en linea %d\n", token, numlinea);
+                        exit(1);
+                    }
+
                     int itis = 0; //booleano para saber si el ingrediente ya esta en ing_dif
                     for (int i = 0; i < numing; i++)
                     {
@@ -85,13 +123,13 @@ int main(int argc, char *argv[])
                     }
                 }
             }
-            token = strtok(NULL, " \n");
+            token = strtok(NULL, "\n ");
             numtoken = numtoken + 1;
         }
         numlinea = numlinea + 1;
     }
     fclose(archivo);
-
+    //########################################################################################## haciendo la matriz
     int matriz[numing][pes[0]]; //el vector 2d
     for (int i = 0; i < numing; i++)
     {
@@ -100,6 +138,7 @@ int main(int argc, char *argv[])
             matriz[i][j] = 0;
         }
     }
+    //############################################################################################# poniendo unos a la matriz recorriendo el archivo de nuevo
     archivo = fopen(argv[1], "r");
     len = 0;
     line = NULL;
@@ -129,6 +168,100 @@ int main(int argc, char *argv[])
     }
     fclose(archivo);
 
+    //######################################################################## haciendo las permutaciones
+    int num = pes[0];
+    int *ap = (int *)malloc(num * sizeof(int));
+    int *solucion = (int *)malloc(num * sizeof(int));
+    int factoriales[num];
+    factoriales[0] = 0;
+    ap[0] = 0;
+    for (int i = 1; i < num; i++)
+    {
+        factoriales[i] = fact(i);
+        ap[i] = i;
+        //printf("####%d\n", factoriales[i]);
+    }
+    int conteo = 0;
+    int posiciones = 0;
+    int mayor = 0;
+    while (1) //################################## permutando
+    {
+
+        posiciones = cuantasPosiciones(conteo, factoriales, num);
+        rotarVector(ap, posiciones);
+        int suma = 0;
+        for (int i = 0; i < numing; i++)
+        {
+            suma = suma + orfila(matriz[i], pes, ap);
+        }
+        if (suma > mayor)
+        {
+            mayor = suma;
+            copiarVector(ap, solucion, num);
+        }
+
+        conteo = conteo + 1;
+        if (conteo == fact(num))
+        {
+            break;
+        }
+    }
+
+    //############################################################### para impresion en output.c
+    FILE *ar = fopen("output.txt", "w");
+    if (ar != NULL)
+    {
+        for (int i = 0; i < numing; i++)
+        {
+            for (int j = 0; j < num; j++)
+            {
+                fputc(matriz[i][j] + '0', ar);
+                fputc(' ', ar);
+            }
+            fputc('\n', ar);
+        }
+        fputc('\n', ar);
+        fputs("Este es el vector de solucion: ", ar);
+        for (int i = 0; i < num; i++)
+        {
+            fputc(solucion[i] + '0', ar);
+            fputc(' ', ar);
+        }
+        fputs("\n\n", ar);
+        fprintf(ar, "La cantidad de ingredientes diferentes totales es: %d\n\n", mayor);
+        int pedido = 0;
+        for (int i = 1; i < 4; i++)
+        {
+            for (int j = 0; j < pes[i]; j++)
+            {
+                fprintf(ar, "El pedido %d contiene: ", pedido);
+
+                for (int h = 0; h < numing; h++)
+                {
+                    int sumaor = 0;
+                    int pos = 0;
+                    for (int k = 0; k < i + 1; k++)
+                    {
+                        sumaor = sumaor + matriz[h][solucion[pos]];
+                        pos = pos + 1;
+                    }
+                    if (sumaor > 0)
+                    {
+                        fprintf(ar, "%s, ", ing_dif[h]);
+                    }
+                }
+
+                fprintf(ar, "\n");
+                pedido = pedido + 1;
+            }
+        }
+    }
+    else
+    {
+        printf("error al imprimir\n");
+    }
+
+    //############################################################## para liberar memoria dinamica e impresiones
     for (int i = 0; i < numing; i++)
     {
         for (int j = 0; j < pes[0]; j++)
@@ -145,55 +278,6 @@ int main(int argc, char *argv[])
         free(ing_dif[i]);
     }
 
-    int num = pes[0];
-    int *ap = (int *)malloc(num * sizeof(int));
-    int *solucion = (int *)malloc(num * sizeof(int));
-    int factoriales[num];
-    factoriales[0] = 0;
-    ap[0] = 0;
-    for (int i = 1; i < num; i++)
-    {
-        factoriales[i] = fact(i);
-        ap[i] = i;
-        //printf("####%d\n", factoriales[i]);
-    }
-
-    int conteo = 0;
-    int posiciones = 0;
-    int mayor = 0;
-    while (1)
-    {
-
-        posiciones = cuantasPosiciones(conteo, factoriales, num);
-
-        rotarVector(ap, posiciones);
-
-        /*
-        for (int i = 0; i < num; i++)
-        {
-            printf("%d", ap[i]);
-        }
-        //printf("\npos=%d", posiciones);
-        printf("\n");*/
-
-        int suma = 0;
-        for (int i = 0; i < numing; i++)
-        {
-            suma = suma + orfila(matriz[i], pes, ap);
-        }
-        if (suma > mayor)
-        {
-            mayor = suma;
-            copiarVector(ap, solucion, num);
-        }
-        //printf("suma: %d\n", suma);
-
-        conteo = conteo + 1;
-        if (conteo == fact(num))
-        {
-            break;
-        }
-    }
     printf("\nsolucion: ");
     for (int i = 0; i < num; i++)
     {
@@ -202,7 +286,6 @@ int main(int argc, char *argv[])
     printf("\n");
     printf("mayor: %d\n", mayor);
 
-    //free(ing_dif);
     free(pes);
     free(solucion);
     free(ap);
